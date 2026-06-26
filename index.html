@@ -109,7 +109,6 @@ let groupId=0,currentGroup=null;
 let lastY=null;
 
 window.onload=()=>{
-
 let params=new URLSearchParams(location.search);
 let dataStr=params.get("data");
 
@@ -223,6 +222,7 @@ html+=`<div class="line">${row}</div>`;
 selectArea.innerHTML=html;
 }
 
+/* pointer操作 */
 document.addEventListener("pointerdown",e=>{
 if(!e.target.classList.contains("word"))return;
 isDown=true;
@@ -240,7 +240,7 @@ add(el);render();
 }
 });
 
-/* ✅ 修正ここだけ */
+/* ✅ ここだけ修正（タップとドラッグ分離） */
 document.addEventListener("pointerup",e=>{
 if(!isDown)return;
 
@@ -275,6 +275,160 @@ if(!selections[l])selections[l]=[];
 let arr=selections[l].filter(x=>x.i!==i);
 arr.push({i,gid:currentGroup});
 selections[l]=arr;
+}
+
+/* ===== 問題生成 ===== */
+function create(){
+
+answers={};selectedQ=[];
+
+pairs.forEach((p,line)=>{
+let words=p.en.split(" ");
+let items=selections[line]||[];
+if(!items.length)return;
+
+let groups={};
+
+items.forEach(x=>{
+if(x.gid!=null)(groups[x.gid]??=[]).push(x.i);
+else groups["s"+x.i]=[x.i];
+});
+
+Object.values(groups).forEach(g=>{
+let start=Math.min(...g);
+let end=Math.max(...g);
+
+let text=words.map((w,i)=>{
+if(i===start)return"______";
+if(i>start&&i<=end)return"";
+return w;
+}).join(" ");
+
+let ans=g.map(i=>words[i].replace(/[.,?!]/g,"")).join(" ");
+
+selectedQ.push({text,ans,jp:p.jp});
+});
+});
+
+selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
+renderQuiz();
+}
+
+/* ===== 問題表示 ===== */
+let touchWord=null,clone=null;
+
+function renderQuiz(){
+let vocab=[...new Set(selectedQ.map(q=>q.ans))];
+let html="";
+
+selectedQ.forEach((q,i)=>{
+html+=`
+<div class="card">
+${i+1}. ${q.text.replace("______",
+`<span class="blank" data-i="${i}">______</span>`)}
+<div class="jpHint">( ${q.jp} )</div>
+</div>`;
+});
+
+html+=`<div id="vocabBox">`;
+
+vocab.forEach(v=>{
+html+=`
+<div class="wordBox"
+ontouchstart="dragStart(event,'${v}')"
+ontouchmove="dragMove(event)"
+ontouchend="dragEnd(event)">
+${v}
+</div>`;
+});
+
+html+=`</div>`;
+html+=`<button class="btn green" onclick="check()">答え合わせ</button>`;
+
+quiz.innerHTML=html;
+}
+
+/* drag */
+function dragStart(e,w){
+touchWord=w;
+clone=document.createElement("div");
+clone.className="draggingClone";
+clone.innerText=w;
+document.body.appendChild(clone);
+}
+
+function dragMove(e){
+if(!clone)return;
+e.preventDefault();
+
+let t=e.touches[0];
+let y=t.clientY;
+
+clone.style.left=(t.clientX-30)+"px";
+clone.style.top=(y-20)+"px";
+
+if(lastY!==null){
+let dy=y-lastY;
+if(dy<0 && y<80)window.scrollBy(0,-6);
+if(dy>0 && y>window.innerHeight-80)window.scrollBy(0,6);
+}
+lastY=y;
+}
+
+function dragEnd(e){
+if(!clone)return;
+
+let t=e.changedTouches[0];
+let target=document.elementFromPoint(t.clientX,t.clientY);
+
+if(target && target.classList.contains("blank")){
+let to=+target.dataset.i;
+let from=null;
+
+Object.keys(answers).forEach(k=>{
+if(answers[k]===touchWord)from=k;
+});
+
+if(from!=null)answers[from]=undefined;
+answers[to]=touchWord;
+
+updateUI();
+}
+
+clone.remove();
+clone=null;
+lastY=null;
+}
+
+function updateUI(){
+document.querySelectorAll(".blank").forEach((el,i)=>{
+el.innerText=answers[i]||"______";
+});
+
+document.querySelectorAll(".wordBox").forEach(el=>{
+let word=el.innerText;
+let used=Object.values(answers).includes(word);
+el.classList.toggle("used",used);
+});
+}
+
+/* 判定 */
+function check(){
+wrongList=[];
+document.querySelectorAll(".blank").forEach((el,i)=>{
+let ok=el.innerText===selectedQ[i].ans;
+el.classList.add(ok?"correct":"wrong");
+if(!ok)wrongList.push(selectedQ[i]);
+});
+if(wrongList.length){
+quiz.innerHTML+=`<button class="btn green" onclick="review()">復習問題</button>`;
+}
+}
+
+function review(){
+selectedQ=wrongList;
+answers={};
+renderQuiz();
 }
 
 </script>
