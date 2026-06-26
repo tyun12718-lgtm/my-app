@@ -1,11 +1,432 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>My App</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{font-family:sans-serif;background:#f3f4f6;padding:10px;}
+.card{background:#fff;padding:15px;border-radius:12px;margin-bottom:15px;}
+
+textarea{width:100%;height:70px;margin-bottom:8px;}
+
+.btn{
+width:100%;padding:12px;border:none;border-radius:10px;margin-top:6px;color:white;
+}
+.blue{background:#3b82f6;}
+.orange{background:#f59e0b;}
+.green{background:#16a34a;}
+
+.copyBtn{background:#10b981;}
+.pasteBtn{background:#6366f1;}
+.urlBtn{background:#0ea5e9;}
+
+.helper{
+font-size:13px;
+color:#555;
+background:#f9fafb;
+padding:8px;
+border-radius:8px;
+margin-bottom:8px;
+}
+
+.line{margin-bottom:8px;}
+.word{display:inline-block;padding:6px;margin:2px;border-radius:6px;cursor:pointer;}
+.single{background:#fde047;}
+.group{background:#fb923c;color:white;margin:0;}
+.group.start{border-radius:8px 0 0 8px;}
+.group.end{border-radius:0 8px 8px 0;}
+
+.blank{display:inline-block;min-width:80px;border-bottom:3px solid black;}
+
+#vocabBox{
+position:sticky;bottom:0;background:#f3f4f6;padding:10px;
+display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+}
+
+.wordBox{
+padding:8px;border:1px solid #ccc;border-radius:8px;text-align:center;background:#fff;
+}
+.wordBox.used{opacity:0.3;}
+
+.jpHint{display:none;}
+.jpHint.show{display:block;}
+
+.correct{background:#86efac;}
+.wrong{background:#fca5a5;}
+
+.draggingClone{
+position:fixed;pointer-events:none;
+background:#f59e0b;color:white;padding:6px 10px;border-radius:6px;z-index:9999;
+}
+</style>
 </head>
+
 <body>
-  <h1>Hello App 🚀</h1>
-  <button onclick="alert('動いた！')">押してみて</button>
+
+<h2>英語問題アプリ</h2>
+
+<div class="card">
+
+<div class="helper">
+英語と日本語を入力 → 選択 → 問題生成<br>
+コピー・ペーストやURLで他のデバイスでも続きから使えます
+</div>
+
+<label>英語</label>
+<textarea id="en"></textarea>
+
+<label>日本語</label>
+<textarea id="jp"></textarea>
+
+<button class="btn blue" onclick="load()">選択開始</button>
+<button class="btn copyBtn" onclick="copyData()">コピー</button>
+<button class="btn pasteBtn" onclick="pasteData()">ペースト</button>
+<button class="btn urlBtn" onclick="shareURL()">URL生成</button>
+
+</div>
+
+<div class="card">
+<h3>選択</h3>
+<div id="selectArea"></div>
+</div>
+
+<div class="card">
+<h3>問題</h3>
+<label><input type="checkbox" id="showJP">日本語表示</label>
+<button class="btn orange" onclick="create()">問題生成</button>
+</div>
+
+<div id="quiz"></div>
+
+<script>
+
+let pairs=[], selections={};
+let selectedQ=[],answers={},wrongList=[];
+let isDown=false,moved=false;
+let groupId=0,currentGroup=null;
+let lastY=null;
+
+/* 初期ロード */
+window.onload=()=>{
+
+/* URL読み込み */
+let params=new URLSearchParams(location.search);
+let dataStr=params.get("data");
+
+if(dataStr){
+try{
+let data=JSON.parse(atob(dataStr));
+pairs=data.pairs||[];
+selections=data.selections||{};
+en.value=pairs.map(p=>p.en).join("\n");
+jp.value=pairs.map(p=>p.jp).join("\n");
+render();
+return;
+}catch{}
+}
+
+/* 保存復元 */
+let d=localStorage.getItem("data");
+if(d){
+let data=JSON.parse(d);
+pairs=data.pairs||[];
+selections=data.selections||{};
+en.value=pairs.map(p=>p.en).join("\n");
+jp.value=pairs.map(p=>p.jp).join("\n");
+render();
+}
+};
+
+/* 保存 */
+function save(){
+localStorage.setItem("data",JSON.stringify({pairs,selections}));
+}
+
+/* コピー */
+function copyData(){
+let text=JSON.stringify({pairs,selections});
+navigator.clipboard.writeText(text)
+.then(()=>alert("コピー成功"))
+.catch(()=>{
+let t=document.createElement("textarea");
+t.value=text;document.body.appendChild(t);t.select();
+document.execCommand("copy");
+document.body.removeChild(t);
+alert("コピー成功（フォールバック）");
+});
+}
+
+/* ペースト */
+async function pasteData(){
+try{
+let t=await navigator.clipboard.readText();
+let d=JSON.parse(t);
+
+pairs=d.pairs||[];
+selections=d.selections||{};
+
+en.value=pairs.map(p=>p.en).join("\n");
+jp.value=pairs.map(p=>p.jp).join("\n");
+
+render();
+
+alert("ペースト成功（状態復元）");
+
+}catch{
+alert("ペースト失敗");
+}
+}
+
+/* URL共有 */
+function shareURL(){
+let data=JSON.stringify({pairs,selections});
+let url=location.origin+location.pathname+"?data="+btoa(data);
+
+navigator.clipboard.writeText(url)
+.then(()=>alert("URLコピー成功"))
+.catch(()=>alert("URLコピー失敗"));
+}
+
+/* load */
+function load(){
+pairs=en.value.split("\n").map((e,i)=>({
+en:e.trim(),
+jp:(jp.value.split("\n")[i]||"").trim()
+}));
+selections={};
+save();
+render();
+}
+
+/* 描画 */
+function render(){
+let html="";
+pairs.forEach((p,line)=>{
+let words=p.en.split(" ");
+let arr=selections[line]||[];
+let map={};
+arr.forEach(x=>map[x.i]=x);
+
+let row="";
+words.forEach((w,i)=>{
+let cls="word";
+let item=map[i];
+
+if(item){
+if(item.gid!=null){
+cls+=" group";
+let g=arr.filter(x=>x.gid===item.gid).map(x=>x.i);
+let min=Math.min(...g);
+let max=Math.max(...g);
+if(i===min)cls+=" start";
+if(i===max)cls+=" end";
+}else cls+=" single";
+}
+
+row+=`<span class="${cls}" data-i="${i}" data-line="${line}">${w}</span>`;
+});
+html+=`<div class="line">${row}</div>`;
+});
+selectArea.innerHTML=html;
+}
+
+/* 選択 */
+document.addEventListener("pointerdown",e=>{
+if(!e.target.classList.contains("word"))return;
+isDown=true;currentGroup=groupId++;
+add(e.target);
+});
+document.addEventListener("pointermove",e=>{
+if(!isDown)return;
+let el=document.elementFromPoint(e.clientX,e.clientY);
+if(el&&el.classList.contains("word")){
+add(el);render();
+}
+});
+document.addEventListener("pointerup",e=>{
+if(!isDown)return;
+toggle(e.target);
+isDown=false;
+save();
+});
+
+function toggle(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+if(!selections[l])selections[l]=[];
+let arr=selections[l];
+if(arr.some(x=>x.i===i)){
+arr=arr.filter(x=>x.i!==i);
+}else{
+arr.push({i});
+}
+selections[l]=arr;
+render();
+save();
+}
+
+function add(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+if(!selections[l])selections[l]=[];
+let arr=selections[l].filter(x=>x.i!==i);
+arr.push({i,gid:currentGroup});
+selections[l]=arr;
+}
+
+/* 問題生成 */
+function create(){
+
+answers={};selectedQ=[];
+
+pairs.forEach((p,line)=>{
+let words=p.en.split(" ");
+let items=selections[line]||[];
+if(!items.length)return;
+
+let groups={};
+items.forEach(x=>{
+if(x.gid!=null){
+(groups[x.gid]??=[]).push(x.i);
+}else{
+groups["s"+x.i]=[x.i];
+}
+});
+
+Object.values(groups).forEach(g=>{
+let start=Math.min(...g);
+let end=Math.max(...g);
+
+let text=words.map((w,i)=>{
+if(i===start)return"______";
+if(i>start&&i<=end)return"";
+return w;
+}).join(" ");
+
+let ans=g.map(i=>words[i].replace(/[.,?!]/g,"")).join(" ");
+
+selectedQ.push({text,ans,jp:p.jp});
+});
+});
+
+selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
+renderQuiz();
+}
+
+/* 問題描画 */
+let touchWord=null,clone=null;
+
+function renderQuiz(){
+let vocab=[...new Set(selectedQ.map(q=>q.ans))];
+let html="";
+
+selectedQ.forEach((q,i)=>{
+html+=`
+<div class="card">
+${i+1}. ${q.text.replace("______",
+`<span class="blank" data-i="${i}">______</span>`)}
+<div class="jpHint">( ${q.jp} )</div>
+</div>`;
+});
+
+html+=`<div id="vocabBox">`;
+
+vocab.forEach(v=>{
+html+=`
+<div class="wordBox"
+ontouchstart="dragStart(event,'${v}')"
+ontouchmove="dragMove(event)"
+ontouchend="dragEnd(event)">
+${v}
+</div>`;
+});
+
+html+=`</div>`;
+html+=`<button class="btn green" onclick="check()">答え合わせ</button>`;
+quiz.innerHTML=html;
+}
+
+/* drag */
+function dragStart(e,w){
+touchWord=w;
+clone=document.createElement("div");
+clone.className="draggingClone";
+clone.innerText=w;
+document.body.appendChild(clone);
+}
+
+function dragMove(e){
+if(!clone)return;
+e.preventDefault();
+
+let t=e.touches[0];
+let y=t.clientY;
+
+clone.style.left=(t.clientX-30)+"px";
+clone.style.top=(y-20)+"px";
+
+if(lastY!==null){
+let dy=y-lastY;
+if(dy<0 && y<80)window.scrollBy(0,-6);
+if(dy>0 && y>window.innerHeight-80)window.scrollBy(0,6);
+}
+lastY=y;
+}
+
+function dragEnd(e){
+if(!clone)return;
+
+let t=e.changedTouches[0];
+let target=document.elementFromPoint(t.clientX,t.clientY);
+
+if(target && target.classList.contains("blank")){
+let to=+target.dataset.i;
+let from=null;
+
+Object.keys(answers).forEach(k=>{
+if(answers[k]===touchWord)from=k;
+});
+
+if(from!=null)answers[from]=undefined;
+answers[to]=touchWord;
+
+updateUI();
+}
+
+clone.remove();
+clone=null;
+lastY=null;
+}
+
+/* UI更新 */
+function updateUI(){
+document.querySelectorAll(".blank").forEach((el,i)=>{
+el.innerText=answers[i]||"______";
+});
+document.querySelectorAll(".wordBox").forEach(el=>{
+let used=Object.values(answers).includes(el.innerText);
+el.classList.toggle("used",used);
+});
+}
+
+/* 判定 */
+function check(){
+wrongList=[];
+document.querySelectorAll(".blank").forEach((el,i)=>{
+let ok=el.innerText===selectedQ[i].ans;
+el.classList.add(ok?"correct":"wrong");
+if(!ok)wrongList.push(selectedQ[i]);
+});
+if(wrongList.length){
+quiz.innerHTML+=`<button class="btn green" onclick="review()">復習問題</button>`;
+}
+}
+
+function review(){
+selectedQ=wrongList;
+answers={};
+renderQuiz();
+}
+
+</script>
 </body>
 </html>
