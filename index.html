@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="apple-touch-icon" href="IMG_2197.png">
+IMG_2197.png
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -78,7 +78,6 @@ let isDown=false,moved=false;
 let groupId=0,currentGroup=null;
 let lastY=null;
 
-/* ===== 初期 ===== */
 window.onload=()=>{
 let params=new URLSearchParams(location.search);
 let dataStr=params.get("data");
@@ -106,7 +105,6 @@ render();
 }
 };
 
-/* その他基本はそのまま */
 function save(){localStorage.setItem("data",JSON.stringify({pairs,selections}));}
 function copyData(){navigator.clipboard.writeText(JSON.stringify({pairs,selections})).then(()=>alert("コピー成功"));}
 async function pasteData(){let t=await navigator.clipboard.readText();let d=JSON.parse(t);pairs=d.pairs||[];selections=d.selections||{};en.value=pairs.map(p=>p.en).join("\n");jp.value=pairs.map(p=>p.jp).join("\n");render();alert("ペースト成功");}
@@ -119,7 +117,6 @@ save();
 render();
 }
 
-/* ===== 描画 ===== */
 function render(){
 let html="";
 pairs.forEach((p,line)=>{
@@ -147,7 +144,6 @@ html+=`<div class="line">${row}</div>`;
 selectArea.innerHTML=html;
 }
 
-/* ===== タッチ ===== */
 document.addEventListener("pointerdown",e=>{
 if(!e.target.classList.contains("word"))return;
 isDown=true;moved=false;
@@ -189,7 +185,7 @@ arr.push({i,gid:currentGroup});
 selections[l]=arr;
 }
 
-/* ===== 問題生成 ===== */
+/* ✅ ここだけ修正 */
 function create(){
 answers={};selectedQ=[];
 pairs.forEach((p,line)=>{
@@ -214,15 +210,17 @@ return w;
 }).join(" ");
 
 let ans=g.map(i=>words[i].replace(/[.,?!]/g,"")).join(" ");
-
 selectedQ.push({text,ans,jp:p.jp});
 });
 });
-selectedQ.sort(()=>Math.random()-0.5);
+
+/* ✅ ここが変更点 */
+selectedQ = selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
+
 renderQuiz();
 }
 
-/* ===== 問題表示 ===== */
+/* 以下すべてそのまま */
 let touchWord=null,clone=null;
 
 function renderQuiz(){
@@ -255,7 +253,6 @@ html+=`<button class="btn green" onclick="check()">答え合わせ</button>`;
 quiz.innerHTML=html;
 }
 
-/* ===== 完全drag（復元） ===== */
 function dragStart(e,w){
 touchWord=w;
 clone=document.createElement("div");
@@ -314,7 +311,6 @@ el.classList.toggle("used",used);
 });
 }
 
-/* ===== 判定（完全復元） ===== */
 function check(){
 wrongList=[];
 document.querySelectorAll(".blank").forEach((el,i)=>{
