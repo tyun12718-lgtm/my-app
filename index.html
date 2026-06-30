@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="apple-touch-icon" href="IMG_2197.png">
+<link rel="apple-touch-icon" href="IMG_2197.png"> 
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +17,7 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 .copyBtn{background:#10b981;}
 .pasteBtn{background:#6366f1;}
 .urlBtn{background:#0ea5e9;}
+.helper{font-size:13px;color:#555;background:#f9fafb;padding:8px;border-radius:8px;margin-bottom:8px;}
 .line{margin-bottom:8px;}
 .word{display:inline-block;padding:6px;margin:2px;border-radius:6px;cursor:pointer;}
 .single{background:#fde047;}
@@ -37,15 +38,31 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 
 <h2>英語問題アプリ</h2>
 
+<div class="card">
+<div class="helper">
+英語と日本語を入力 → 選択 → 問題生成<br>
+URLで共有できます
+</div>
+
+<label>英語</label>
 <textarea id="en"></textarea>
+
+<label>日本語</label>
 <textarea id="jp"></textarea>
 
-<button onclick="load()">選択開始</button>
-<button onclick="shareURL()">URL生成</button>
+<button class="btn blue" onclick="load()">選択開始</button>
+<button class="btn urlBtn" onclick="shareURL()">URL生成</button>
+</div>
 
+<div class="card">
+<h3>選択</h3>
 <div id="selectArea"></div>
+</div>
 
-<button onclick="create()">問題生成</button>
+<div class="card">
+<h3>問題</h3>
+<button class="btn orange" onclick="create()">問題生成</button>
+</div>
 
 <div id="quiz"></div>
 
@@ -64,6 +81,8 @@ if(d){
 let data=JSON.parse(LZString.decompressFromEncodedURIComponent(d));
 pairs=data.pairs||[];
 selections=data.selections||{};
+en.value=pairs.map(p=>p.en).join("\n");
+jp.value=pairs.map(p=>p.jp).join("\n");
 render();
 }
 };
@@ -156,7 +175,7 @@ html+=`<div class="line">${row}</div>`;
 selectArea.innerHTML=html;
 }
 
-/* ===== 問題生成（フレーズ対応） ===== */
+/* ===== 問題生成 ===== */
 function create(){
 answers={};selectedQ=[];
 
@@ -199,7 +218,8 @@ let html="";
 
 selectedQ.forEach((q,i)=>{
 html+=`
-<div>
+<div class="card">
+${i+1}.
 ${q.text.replace("______",
 `<span class="blank" data-i="${i}">______</span>`)}
 </div>`;
@@ -216,7 +236,7 @@ ontouchend="dragEnd(event)">
 ${v}</div>`;
 });
 
-html+=`</div><button onclick="check()">答え合わせ</button>`;
+html+=`</div><button class="btn green" onclick="check()">答え合わせ</button>`;
 quiz.innerHTML=html;
 }
 
@@ -230,7 +250,7 @@ document.body.appendChild(clone);
 
 function dragMove(e){
 if(!clone)return;
-e.preventDefault(); // ← ここだけ修正
+e.preventDefault(); // ← 唯一の修正
 let t=e.touches[0];
 clone.style.left=(t.clientX-30)+"px";
 clone.style.top=(t.clientY-20)+"px";
