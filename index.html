@@ -37,8 +37,21 @@ textarea{width:100%;height:80px;padding:10px;margin-bottom:10px;border-radius:10
 .correct{background:#86efac;}
 .wrong{background:#fca5a5;}
 .draggingClone{position:fixed;pointer-events:none;background:#f59e0b;color:white;padding:6px;border-radius:6px;}
-#counter{text-align:center;font-weight:600;margin-bottom:8px;}
-#toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 16px;border-radius:10px;opacity:0;transition:0.3s;}
+
+#counter{text-align:center;font-weight:600;margin:8px 0;}
+
+#toast{
+position:fixed;
+bottom:30px;
+left:50%;
+transform:translateX(-50%);
+background:#333;
+color:#fff;
+padding:10px 16px;
+border-radius:10px;
+opacity:0;
+transition:0.3s;
+}
 #toast.show{opacity:1;}
 </style>
 </head>
@@ -59,7 +72,9 @@ textarea{width:100%;height:80px;padding:10px;margin-bottom:10px;border-radius:10
 <button class="btn urlBtn" onclick="shareURL()">URL生成</button>
 </div>
 
-<div class="card"><div id="selectArea"></div></div>
+<div class="card">
+<div id="selectArea"></div>
+</div>
 
 <div class="card">
 <label><input type="checkbox" id="showJP"> 日本語表示</label>
@@ -67,6 +82,7 @@ textarea{width:100%;height:80px;padding:10px;margin-bottom:10px;border-radius:10
 </div>
 
 <div id="quiz"></div>
+
 <div id="toast"></div>
 
 <script>
@@ -125,7 +141,7 @@ saveState();
 /* URL */
 function shareURL(){
 let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections}));
-navigator.clipboard.writeText(location.origin+location.pathname+"?data="+data);
+navigator.clipboard.writeText(location.href.split("?")[0]+"?data="+data);
 showToast("共有URLコピー成功");
 }
 
@@ -254,17 +270,19 @@ let vocab=selectedQ.map(q=>q.ans).sort(()=>Math.random()-0.5);
 let show=document.getElementById("showJP").checked;
 let html="";
 
-html+=`<div id="counter">回答済み：0 / ${selectedQ.length}</div>`;
-
 selectedQ.forEach((q,i)=>{
 html+=`
 <div class="card">
 ${q.text.replace("______",`<span class="blank" data-i="${i}">______</span>`)}
-${show?`<div class="jpHint show">${q.jp}</div>`:``}
+${show?`<div class="jpHint show">${q.jp}</div>`:""}
 </div>`;
 });
 
+/* ✅ ボタン近くにカウンター */
+html+=`<div id="counter"></div>`;
+
 html+=`<div id="vocabBox">`;
+
 vocab.forEach(v=>{
 html+=`
 <div class="wordBox"
@@ -273,6 +291,7 @@ ontouchmove="dragMove(event)"
 ontouchend="dragEnd(event)">
 ${v}</div>`;
 });
+
 html+=`</div>
 <button class="btn green" onclick="check()">答え合わせ</button>`;
 
@@ -297,7 +316,6 @@ clone.style.left=(t.clientX-30)+"px";
 clone.style.top=(t.clientY-20)+"px";
 }
 
-/* ✅ 同語句移動ロジック追加 */
 function dragEnd(e){
 if(!clone)return;
 let t=e.changedTouches[0];
@@ -306,6 +324,7 @@ let target=document.elementFromPoint(t.clientX,t.clientY);
 if(target&&target.classList.contains("blank")){
 let i=+target.dataset.i;
 
+/* 同じ語句移動 */
 Object.keys(answers).forEach(k=>{
 if(answers[k]===touchWord)answers[k]="";
 });
@@ -330,18 +349,29 @@ updateCounter();
 function updateCounter(){
 let count=Object.values(answers).filter(v=>v).length;
 let total=selectedQ.length;
-let c=document.getElementById("counter");
-if(c)c.innerText=`回答済み：${count} / ${total}`;
+let el=document.getElementById("counter");
+if(el) el.innerText=`回答済み：${count} / ${total}`;
 }
 
-/* 判定 */
+/* ✅ 未回答チェック付き判定 */
 function check(){
+
+let total = selectedQ.length;
+let count = Object.values(answers).filter(v=>v).length;
+
+if(count < total){
+let ok = confirm(`${total-count}問未回答です。答え合わせしますか？`);
+if(!ok) return;
+}
+
 wrongList=[];
 document.querySelectorAll(".blank").forEach((el,i)=>{
-let ok=el.innerText===selectedQ[i].ans;
+let ans=answers[i]||"";
+let ok=ans===selectedQ[i].ans;
 el.classList.add(ok?"correct":"wrong");
-if(!ok)wrongList.push(selectedQ[i]);
+if(!ok) wrongList.push(selectedQ[i]);
 });
+
 saveState();
 }
 
