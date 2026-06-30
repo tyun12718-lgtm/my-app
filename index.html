@@ -278,6 +278,7 @@ ${show?`<div class="jpHint show">${q.jp}</div>`:""}
 </div>`;
 });
 
+/* ✅ vocabBox */
 html+=`<div id="vocabBox">`;
 
 vocab.forEach(v=>{
@@ -289,9 +290,11 @@ ontouchend="dragEnd(event)">
 ${v}</div>`;
 });
 
-html+=`</div>
+/* ✅ ここで閉じる（重要） */
+html+=`</div>`;
 
-/* ✅ ここが重要：ボタン直前にカウンター */
+/* ✅ 外に出す */
+html+=`
 <div id="counter"></div>
 
 <button class="btn green" onclick="check()">答え合わせ</button>
@@ -361,28 +364,29 @@ function check(){
 let total = selectedQ.length;
 let count = Object.values(answers).filter(v=>v).length;
 
-/* ✅ 未回答チェック */
 if(count < total){
 let ok = confirm(`${total-count}問未回答です。答え合わせしますか？`);
 if(!ok) return;
 }
 
 wrongList=[];
-
 document.querySelectorAll(".blank").forEach((el,i)=>{
 let ans=answers[i]||"";
 let ok=ans===selectedQ[i].ans;
 el.classList.add(ok?"correct":"wrong");
 if(!ok) wrongList.push(selectedQ[i]);
 });
-
 saveState();
 }
 
-/* ✅ 復習（完全復元） */
+/* 復習 */
 function review(){
-if(!wrongList.length)return;
+if(!wrongList.length){
+showToast("復習する問題がありません");
+return;
+}
 selectedQ=wrongList.sort(()=>Math.random()-0.5);
+answers={};
 renderQuiz();
 }
 
