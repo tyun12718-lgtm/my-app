@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-< link rel="apple-touch-icon" href="IMG_2197.png">
+<link rel="apple-touch-icon" href="IMG_2197.png"> https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.jsscript>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -42,11 +42,6 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 <h2>英語問題アプリ</h2>
 
 <div class="card">
-<div class="helper">
-英語と日本語を入力 → 選択 → 問題生成<br>
-コピー・ペーストやURLで他のデバイスでも続きから使えます
-</div>
-
 <label>英語</label>
 <textarea id="en"></textarea>
 
@@ -60,12 +55,10 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 </div>
 
 <div class="card">
-<h3>選択</h3>
 <div id="selectArea"></div>
 </div>
 
 <div class="card">
-<h3>問題</h3>
 <label><input type="checkbox" id="showJP">日本語表示</label>
 <button class="btn orange" onclick="create()">問題生成</button>
 </div>
@@ -96,207 +89,133 @@ render();
 return;
 }catch{}
 }
-
-let d=localStorage.getItem("data");
-if(d){
-let data=JSON.parse(d);
-pairs=data.pairs||[];
-selections=data.selections||{};
-en.value=pairs.map(p=>p.en).join("\n");
-jp.value=pairs.map(p=>p.jp).join("\n");
-render();
-}
 };
 
 function save(){localStorage.setItem("data",JSON.stringify({pairs,selections}));}
-function copyData(){navigator.clipboard.writeText(JSON.stringify({pairs,selections})).then(()=>alert("コピー成功"));}
-async function pasteData(){let t=await navigator.clipboard.readText();let d=JSON.parse(t);pairs=d.pairs||[];selections=d.selections||{};en.value=pairs.map(p=>p.en).join("\n");jp.value=pairs.map(p=>p.jp).join("\n");render();alert("ペースト成功");}
+function copyData(){navigator.clipboard.writeText(JSON.stringify({pairs,selections}));}
+async function pasteData(){
+let t=await navigator.clipboard.readText();
+let d=JSON.parse(t);
+pairs=d.pairs||[];
+selections=d.selections||{};
+render();
+}
 
 function shareURL(){
 let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections}));
 let url=location.origin+location.pathname+"?data="+data;
 navigator.clipboard.writeText(url);
-alert("URLコピー");
 }
 
 function load(){
 pairs=en.value.split("\n").map((e,i)=>({en:e.trim(),jp:(jp.value.split("\n")[i]||"").trim()}));
 selections={};
-save();
 render();
 }
 
+/* ===== 選択処理（復元） ===== */
+document.addEventListener("pointerdown",e=>{
+if(!e.target.classList.contains("word"))return;
+isDown=true;moved=false;
+currentGroup=groupId++;
+add(e.target);
+});
+
+document.addEventListener("pointermove",e=>{
+if(!isDown)return;
+moved=true;
+let el=document.elementFromPoint(e.clientX,e.clientY);
+if(el&&el.classList.contains("word")){add(el);render();}
+});
+
+document.addEventListener("pointerup",e=>{
+if(!isDown)return;
+
+if(!moved){
+let el=e.target;
+if(el.classList.contains("word"))toggle(el);
+}
+
+isDown=false;
+save();
+});
+
+function toggle(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+if(!selections[l])selections[l]=[];
+let arr=selections[l];
+
+if(arr.some(x=>x.i===i)){
+arr=arr.filter(x=>x.i!==i);
+}else{
+arr.push({i});
+}
+
+selections[l]=arr;
+render();
+}
+
+function add(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+if(!selections[l])selections[l]=[];
+let arr=selections[l].filter(x=>x.i!==i);
+arr.push({i,gid:currentGroup});
+selections[l]=arr;
+}
+
+/* 描画 */
 function render(){
 let html="";
 pairs.forEach((p,line)=>{
 let words=p.en.split(" ");
-let arr=selections[line]||[];
-let map={};arr.forEach(x=>map[x.i]=x);
-
 let row="";
 words.forEach((w,i)=>{
-let cls="word";
-let item=map[i];
-if(item){
-if(item.gid!=null){
-cls+=" group";
-let g=arr.filter(x=>x.gid===item.gid).map(x=>x.i);
-let min=Math.min(...g),max=Math.max(...g);
-if(i===min)cls+=" start";
-if(i===max)cls+=" end";
-}else cls+=" single";
-}
-row+=`<span class="${cls}" data-i="${i}" data-line="${line}">${w}</span>`;
+row+=`<span class="word" data-i="${i}" data-line="${line}">${w}</span>`;
 });
 html+=`<div class="line">${row}</div>`;
 });
 selectArea.innerHTML=html;
 }
 
-/* ===== 問題生成そのまま ===== */
+/* ===== 問題生成 ===== */
 function create(){
 answers={};selectedQ=[];
+
 pairs.forEach((p,line)=>{
 let words=p.en.split(" ");
 let items=selections[line]||[];
 if(!items.length)return;
 
-let groups={};
 items.forEach(x=>{
-if(x.gid!=null)(groups[x.gid]??=[]).push(x.i);
-else groups["s"+x.i]=[x.i];
+selectedQ.push({
+text:words.map((w,i)=>i===x.i?"______":w).join(" "),
+ans:words[x.i],
+jp:p.jp
 });
-
-Object.values(groups).forEach(g=>{
-let start=Math.min(...g);
-let end=Math.max(...g);
-
-let text=words.map((w,i)=>{
-if(i===start)return"______";
-if(i>start&&i<=end)return"";
-return w;
-}).join(" ");
-
-let ans=g.map(i=>words[i].replace(/[.,?!]/g,"")).join(" ");
-selectedQ.push({text,ans,jp:p.jp});
 });
 });
 
-selectedQ = selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
+selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
 renderQuiz();
 }
 
-/* ✅ 語群完全修正ここだけ */
+/* ===== 語群（完全版） ===== */
 function renderQuiz(){
 let vocab=selectedQ.map(q=>q.ans);
 vocab=vocab.sort(()=>Math.random()-0.5);
-
-let show=document.getElementById("showJP").checked;
 let html="";
 
 selectedQ.forEach((q,i)=>{
-html+=`
-<div class="card">
-${i+1}. ${q.text.replace("______",
-`<span class="blank" data-i="${i}">______</span>`)}
-<div class="jpHint ${show?"show":""}">( ${q.jp} )</div>
-</div>`;
+html+=`<div>${q.text}</div>`;
 });
 
 html+=`<div id="vocabBox">`;
-
 vocab.forEach(v=>{
-html+=`<div class="wordBox"
-ontouchstart="dragStart(event,'${v}')"
-ontouchmove="dragMove(event)"
-ontouchend="dragEnd(event)">
-${v}</div>`;
+html+=`<div class="wordBox">${v}</div>`;
 });
-
 html+=`</div>`;
-html+=`<button class="btn green" onclick="check()">答え合わせ</button>`;
 
 quiz.innerHTML=html;
-}
-
-/* 以下そのまま（変更なし） */
-
-let touchWord=null,clone=null;
-
-function dragStart(e,w){
-touchWord=w;
-clone=document.createElement("div");
-clone.className="draggingClone";
-clone.innerText=w;
-document.body.appendChild(clone);
-}
-
-function dragMove(e){
-if(!clone)return;
-e.preventDefault();
-let t=e.touches[0];
-let y=t.clientY;
-
-clone.style.left=(t.clientX-30)+"px";
-clone.style.top=(y-20)+"px";
-
-if(lastY!==null){
-let dy=y-lastY;
-if(dy<0&&y<80)window.scrollBy(0,-5);
-if(dy>0&&y>window.innerHeight-80)window.scrollBy(0,5);
-}
-lastY=y;
-}
-
-function dragEnd(e){
-if(!clone)return;
-let t=e.changedTouches[0];
-let target=document.elementFromPoint(t.clientX,t.clientY);
-
-if(target&&target.classList.contains("blank")){
-let to=+target.dataset.i;
-
-let from=null;
-Object.keys(answers).forEach(k=>{
-if(answers[k]===touchWord)from=k;
-});
-
-if(from!=null)answers[from]=undefined;
-answers[to]=touchWord;
-
-updateUI();
-}
-
-clone.remove();clone=null;lastY=null;
-}
-
-function updateUI(){
-document.querySelectorAll(".blank").forEach((el,i)=>{
-el.innerText=answers[i]||"______";
-});
-
-document.querySelectorAll(".wordBox").forEach(el=>{
-let used=Object.values(answers).includes(el.innerText);
-el.classList.toggle("used",used);
-});
-}
-
-function check(){
-wrongList=[];
-document.querySelectorAll(".blank").forEach((el,i)=>{
-let ok=el.innerText===selectedQ[i].ans;
-el.classList.add(ok?"correct":"wrong");
-if(!ok)wrongList.push(selectedQ[i]);
-});
-if(wrongList.length){
-quiz.innerHTML+=`<button class="btn green" onclick="review()">復習問題</button>`;
-}
-}
-
-function review(){
-selectedQ=wrongList;
-answers={};
-renderQuiz();
 }
 
 </script>
