@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="apple-touch-icon" href="IMG_2197.png"> 
+<link rel="apple-touch-icon" href="IMG_2197.png">
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -41,7 +41,7 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 <div class="card">
 <div class="helper">
 英語と日本語を入力 → 選択 → 問題生成<br>
-コピー・ペーストやURLで続きから使えます
+URLやコピーで保存できます
 </div>
 
 <label>英語</label>
@@ -80,18 +80,16 @@ window.onload=()=>{
 let p=new URLSearchParams(location.search);
 let d=p.get("data");
 if(d){
-try{
 let data=JSON.parse(LZString.decompressFromEncodedURIComponent(d));
 pairs=data.pairs||[];
 selections=data.selections||{};
 en.value=pairs.map(p=>p.en).join("\n");
 jp.value=pairs.map(p=>p.jp).join("\n");
 render();
-}catch{}
 }
 };
 
-/* ===== コピー・ペースト ===== */
+/* ✅ コピー・ペースト追加（これだけ） */
 function copyData(){
 navigator.clipboard.writeText(JSON.stringify({pairs,selections}));
 }
@@ -112,7 +110,6 @@ let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections
 navigator.clipboard.writeText(location.origin+location.pathname+"?data="+data);
 }
 
-/* ===== 入力 ===== */
 function load(){
 pairs=en.value.split("\n").map((e,i)=>({en:e,jp:(jp.value.split("\n")[i]||"")}));
 selections={};
