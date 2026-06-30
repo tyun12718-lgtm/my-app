@@ -41,7 +41,7 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 <div class="card">
 <div class="helper">
 英語と日本語を入力 → 選択 → 問題生成<br>
-URLで共有できます
+コピー・ペーストやURLで続きから使えます
 </div>
 
 <label>英語</label>
@@ -51,6 +51,8 @@ URLで共有できます
 <textarea id="jp"></textarea>
 
 <button class="btn blue" onclick="load()">選択開始</button>
+<button class="btn copyBtn" onclick="copyData()">コピー</button>
+<button class="btn pasteBtn" onclick="pasteData()">ペースト</button>
 <button class="btn urlBtn" onclick="shareURL()">URL生成</button>
 </div>
 
@@ -78,15 +80,33 @@ window.onload=()=>{
 let p=new URLSearchParams(location.search);
 let d=p.get("data");
 if(d){
+try{
 let data=JSON.parse(LZString.decompressFromEncodedURIComponent(d));
 pairs=data.pairs||[];
 selections=data.selections||{};
 en.value=pairs.map(p=>p.en).join("\n");
 jp.value=pairs.map(p=>p.jp).join("\n");
 render();
+}catch{}
 }
 };
 
+/* ===== コピー・ペースト ===== */
+function copyData(){
+navigator.clipboard.writeText(JSON.stringify({pairs,selections}));
+}
+
+async function pasteData(){
+let t=await navigator.clipboard.readText();
+let d=JSON.parse(t);
+pairs=d.pairs||[];
+selections=d.selections||{};
+en.value=pairs.map(p=>p.en).join("\n");
+jp.value=pairs.map(p=>p.jp).join("\n");
+render();
+}
+
+/* ===== URL生成 ===== */
 function shareURL(){
 let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections}));
 navigator.clipboard.writeText(location.origin+location.pathname+"?data="+data);
@@ -209,7 +229,7 @@ selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
 renderQuiz();
 }
 
-/* ===== 表示＆ドラッグ ===== */
+/* ===== ドラッグ ===== */
 let touchWord=null,clone=null;
 
 function renderQuiz(){
@@ -250,7 +270,7 @@ document.body.appendChild(clone);
 
 function dragMove(e){
 if(!clone)return;
-e.preventDefault(); // ← 唯一の修正
+e.preventDefault();
 let t=e.touches[0];
 clone.style.left=(t.clientX-30)+"px";
 clone.style.top=(t.clientY-20)+"px";
