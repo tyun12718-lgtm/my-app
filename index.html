@@ -14,9 +14,9 @@ textarea{width:100%;height:80px;padding:10px;margin-bottom:10px;border-radius:10
 .helper{background:#d1d5db;padding:10px;border-radius:10px;margin-bottom:12px;}
 .btn{width:100%;padding:14px;border:none;border-radius:12px;margin-top:8px;color:white;}
 .blue{background:#4f7bd9;}
-copyBtn{background:#4fb07f;}
-pasteBtn{background:#6868d4;}
-urlBtn{background:#4a90c2;}
+.copyBtn{background:#4fb07f;}
+.pasteBtn{background:#6868d4;}
+.urlBtn{background:#4a90c2;}
 .orange{background:#f59e0b;}
 .green{background:#16a34a;}
 .card{background:#fff;padding:15px;border-radius:12px;margin-bottom:15px;}
@@ -153,21 +153,244 @@ render();
 saveState();
 }
 
-/* ✅ 修正ここだけ */
+/* 選択 */
+document.addEventListener("pointerdown",e=>{
+if(!e.target.classList.contains("word"))return;
+isDown=true;moved=false;
+currentGroup=groupId++;
+add(e.target);
+});
+
+document.addEventListener("pointermove",e=>{
+if(!isDown)return;
+e.preventDefault();
+moved=true;
+let el=document.elementFromPoint(e.clientX,e.clientY);
+if(el&&el.classList.contains("word")){
+add(el);
+render();
+}
+});
+
+document.addEventListener("pointerup",e=>{
+if(!isDown)return;
+if(!moved)toggle(e.target);
+isDown=false;
+saveState();
+});
+
+function toggle(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+let arr=selections[l]||[];
+selections[l]=arr.some(x=>x.i===i)?arr.filter(x=>x.i!==i):[...arr,{i}];
+render();
+saveState();
+}
+
+function add(el){
+let l=+el.dataset.line,i=+el.dataset.i;
+let arr=(selections[l]||[]).filter(x=>x.i!==i);
+arr.push({i,gid:currentGroup});
+selections[l]=arr;
+}
+
+/* 描画 */
+function render(){
+let html="";
+pairs.forEach((p,line)=>{
+let words=p.en.split(" ");
+let arr=selections[line]||[];
+let map={};arr.forEach(x=>map[x.i]=x);
+
+let row="";
+words.forEach((w,i)=>{
+let cls="word";
+let item=map[i];
+if(item){
+if(item.gid!=null){
+cls+=" group";
+let g=arr.filter(x=>x.gid===item.gid).map(x=>x.i);
+if(i===Math.min(...g))cls+=" start";
+if(i===Math.max(...g))cls+=" end";
+}else cls+=" single";
+}
+row+=`<span class="${cls}" data-i="${i}" data-line="${line}">${w}</span>`;
+});
+html+=`<div class="line">${row}</div>`;
+});
+selectArea.innerHTML=html;
+quiz.innerHTML="";
+}
+
+/* 問題生成 */
+function create(){
+answers={};selectedQ=[];
+
+pairs.forEach((p,line)=>{
+let raw=p.en.split(" ");
+let words=raw.map(w=>({
+word:w.replace(/[.,!?]/g,""),
+mark:(w.match(/[.,!?]/)||[""])[0]
+}));
+
+let items=selections[line]||[];
+if(!items.length)return;
+
+let groups={};
+items.forEach(x=>{
+if(x.gid!=null)(groups[x.gid]??=[]).push(x.i);
+else groups["s"+x.i]=[x.i];
+});
+
+Object.values(groups).forEach(g=>{
+g.sort((a,b)=>a-b);
+let s=g[0],e=g[g.length-1];
+
+let text=words.map((w,i)=>{
+if(i===s)return"______";
+if(i>s&&i<=e)return"";
+return w.word+w.mark;
+}).join(" ").replace(/\s+/g," ").trim();
+
+let ans=g.map(i=>words[i].word).join(" ");
+selectedQ.push({text,ans,jp:p.jp});
+});
+});
+
+selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
+renderQuiz();
+saveState();
+}
+
+/* クイズ */
+let touchWord=null,clone=null;
+
+function renderQuiz(){
+let vocab=selectedQ.map(q=>q.ans).sort(()=>Math.random()-0.5);
+let show=document.getElementById("showJP").checked;
+let html="";
+
+selectedQ.forEach((q,i)=>{
+html+=`
+<div class="card">
+${q.text.replace("______",`<span class="blank" data-i="${i}">______</span>`)}
+${show?`<div class="jpHint show">${q.jp}</div>`:""}
+</div>`;
+});
+
+/* ✅ vocabBox */
+html+=`<div id="vocabBox">`;
+
+vocab.forEach(v=>{
+html+=`
+<div class="wordBox"
+ontouchstart="dragStart(event,'${v}')"
+ontouchmove="dragMove(event)"
+ontouchend="dragEnd(event)">
+${v}</div>`;
+});
+
+/* ✅ ここで閉じる（重要） */
+html+=`</div>`;
+
+/* ✅ 外に出す */
+html+=`
+<div id="counter"></div>
+
+<button class="btn green" onclick="check()">答え合わせ</button>
+<button class="btn green" onclick="review()">復習問題</button>
+`;
+
+quiz.innerHTML=html;
+updateCounter();
+}
+
+/* ドラッグ */
+function dragStart(e,w){
+touchWord=w;
+clone=document.createElement("div");
+clone.className="draggingClone";
+clone.innerText=w;
+document.body.appendChild(clone);
+}
+
+function dragMove(e){
+if(!clone)return;
+e.preventDefault();
+let t=e.touches[0];
+clone.style.left=(t.clientX-30)+"px";
+clone.style.top=(t.clientY-20)+"px";
+}
+
+function dragEnd(e){
+if(!clone)return;
+let t=e.changedTouches[0];
+let target=document.elementFromPoint(t.clientX,t.clientY);
+
+if(target&&target.classList.contains("blank")){
+let i=+target.dataset.i;
+
+Object.keys(answers).forEach(k=>{
+if(answers[k]===touchWord)answers[k]="";
+});
+
+answers[i]=touchWord;
+updateUI();
+saveState();
+}
+
+clone.remove();
+clone=null;
+}
+
+/* 更新 */
 function updateUI(){
 document.querySelectorAll(".blank").forEach((el,i)=>{
 el.innerText=answers[i]||"______";
 });
-
-/* ←これを追加（元機能復元） */
-document.querySelectorAll(".wordBox").forEach(el=>{
-let used = Object.values(answers).includes(el.innerText);
-el.classList.toggle("used", used);
-});
-
 updateCounter();
+}
+
+function updateCounter(){
+let count=Object.values(answers).filter(v=>v).length;
+let total=selectedQ.length;
+let el=document.getElementById("counter");
+if(el) el.innerText=`回答済み：${count} / ${total}`;
+}
+
+/* 判定 */
+function check(){
+
+let total = selectedQ.length;
+let count = Object.values(answers).filter(v=>v).length;
+
+if(count < total){
+let ok = confirm(`${total-count}問未回答です。答え合わせしますか？`);
+if(!ok) return;
+}
+
+wrongList=[];
+document.querySelectorAll(".blank").forEach((el,i)=>{
+let ans=answers[i]||"";
+let ok=ans===selectedQ[i].ans;
+el.classList.add(ok?"correct":"wrong");
+if(!ok) wrongList.push(selectedQ[i]);
+});
+saveState();
+}
+
+/* 復習 */
+function review(){
+if(!wrongList.length){
+showToast("復習する問題がありません");
+return;
+}
+selectedQ=wrongList.sort(()=>Math.random()-0.5);
+answers={};
+renderQuiz();
 }
 
 </script>
 </body>
 </html>
+どこ？　何行目
