@@ -23,11 +23,19 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 .group{background:#fb923c;color:white;margin:0;}
 .group.start{border-radius:8px 0 0 8px;}
 .group.end{border-radius:0 8px 8px 0;}
-.blank{display:inline-block;min-width:80px;border-bottom:3px solid black;}
+
+.blank{
+min-width:120px;
+min-height:30px;
+display:inline-flex;
+align-items:center;
+justify-content:center;
+border-bottom:3px solid black;
+}
+
 .jpHint{display:none;font-size:13px;color:#555;margin-top:4px;}
 .jpHint.show{display:block;}
 
-/* ✅ 語群（下だけ表示・上には来ない） */
 #vocabBox{
 position:sticky;
 bottom:0;
@@ -39,14 +47,22 @@ gap:6px;
 z-index:10;
 }
 
-/* ✅ 被らない */
 #quiz{padding-bottom:140px;}
 
 .wordBox{padding:8px;border:1px solid #ccc;border-radius:8px;text-align:center;background:#fff;}
 .wordBox.used{opacity:0.3;}
+
 .correct{background:#86efac;}
 .wrong{background:#fca5a5;}
-.draggingClone{position:fixed;pointer-events:none;background:#f59e0b;color:white;padding:6px;border-radius:6px;}
+
+.draggingClone{
+position:fixed;
+pointer-events:none;
+background:#f59e0b;
+color:white;
+padding:6px;
+border-radius:6px;
+}
 </style>
 </head>
 
@@ -73,7 +89,6 @@ let selectedQ=[],answers={};
 let isDown=false,moved=false;
 let groupId=0,currentGroup=null;
 
-/* ===== URL ===== */
 window.onload=()=>{
 let p=new URLSearchParams(location.search);
 let d=p.get("data");
@@ -171,11 +186,10 @@ html+=`<div class="line">${row}</div>`;
 });
 selectArea.innerHTML=html;
 
-/* ✅ 選択画面では語群消す */
 quiz.innerHTML="";
 }
 
-/* ✅ ✅ ✅ グループ＋記号完全復元 */
+/* ===== create（完全復元） ===== */
 function create(){
 answers={};selectedQ=[];
 
@@ -191,19 +205,24 @@ if(!items.length)return;
 
 let groups={};
 items.forEach(x=>{
-if(x.gid!=null)(groups[x.gid]??=[]).push(x.i);
-else groups["s"+x.i]=[x.i];
+if(x.gid!=null){
+if(!groups[x.gid]) groups[x.gid]=[];
+groups[x.gid].push(x.i);
+}else{
+groups["s"+x.i]=[x.i];
+}
 });
 
 Object.values(groups).forEach(g=>{
-let start=Math.min(...g);
-let end=Math.max(...g);
+g.sort((a,b)=>a-b);
+let start=g[0];
+let end=g[g.length-1];
 
 let text=words.map((w,i)=>{
 if(i===start)return"______";
 if(i>start&&i<=end)return"";
-return w.word+w.mark;
-}).join(" ");
+return w.word + w.mark;
+}).join(" ").replace(/\s+/g," ").trim();
 
 let ans=g.map(i=>words[i].word).join(" ");
 selectedQ.push({text,ans,jp:p.jp});
@@ -256,8 +275,8 @@ function dragMove(e){
 if(!clone)return;
 e.preventDefault();
 let t=e.touches[0];
-clone.style.left=(t.clientX-30)+"px";
-clone.style.top=(t.clientY-20)+"px";
+clone.style.left=(t.clientX - clone.offsetWidth/2)+"px";
+clone.style.top=(t.clientY - clone.offsetHeight/2)+"px";
 }
 
 function dragEnd(e){
@@ -278,6 +297,12 @@ clone=null;
 function updateUI(){
 document.querySelectorAll(".blank").forEach((el,i)=>{
 el.innerText=answers[i]||"______";
+});
+
+/* ✅ 使用済み表示 */
+document.querySelectorAll(".wordBox").forEach(el=>{
+let used=Object.values(answers).includes(el.innerText);
+el.classList.toggle("used",used);
 });
 }
 
