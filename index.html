@@ -43,7 +43,7 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 <div class="card">
 <div class="helper">
 英語と日本語を入力 → 選択 → 問題生成<br>
-URLで共有できます
+コピー・URLで保存可能
 </div>
 
 <label>英語</label>
@@ -65,10 +65,9 @@ URLで共有できます
 
 <div class="card">
 <h3>問題</h3>
-
 <label><input type="checkbox" id="showJP">日本語表示</label>
-
 <button class="btn orange" onclick="create()">問題生成</button>
+<button class="btn green" onclick="review()">復習問題</button>
 </div>
 
 <div id="quiz"></div>
@@ -76,27 +75,37 @@ URLで共有できます
 <script>
 
 let pairs=[], selections={};
-let selectedQ=[],answers={};
+let selectedQ=[],answers={},wrongList=[];
 let isDown=false,moved=false;
 let groupId=0,currentGroup=null;
 
+/* ===== URL ===== */
 window.onload=()=>{
 let p=new URLSearchParams(location.search);
 let d=p.get("data");
 if(d){
+try{
 let data=JSON.parse(LZString.decompressFromEncodedURIComponent(d));
 pairs=data.pairs||[];
 selections=data.selections||{};
 en.value=pairs.map(p=>p.en).join("\n");
 jp.value=pairs.map(p=>p.jp).join("\n");
 render();
+}catch{}
 }
 };
 
+function shareURL(){
+let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections}));
+navigator.clipboard.writeText(location.origin+location.pathname+"?data="+data);
+}
+
+/* コピー */
 function copyData(){
 navigator.clipboard.writeText(JSON.stringify({pairs,selections}));
 }
 
+/* ペースト */
 async function pasteData(){
 let t=await navigator.clipboard.readText();
 let d=JSON.parse(t);
@@ -107,17 +116,14 @@ jp.value=pairs.map(p=>p.jp).join("\n");
 render();
 }
 
-function shareURL(){
-let data=LZString.compressToEncodedURIComponent(JSON.stringify({pairs,selections}));
-navigator.clipboard.writeText(location.origin+location.pathname+"?data="+data);
-}
-
+/* ===== 入力 ===== */
 function load(){
 pairs=en.value.split("\n").map((e,i)=>({en:e,jp:(jp.value.split("\n")[i]||"")}));
 selections={};
 render();
 }
 
+/* ===== 選択 ===== */
 document.addEventListener("pointerdown",e=>{
 if(!e.target.classList.contains("word"))return;
 isDown=true;moved=false;
@@ -145,12 +151,7 @@ function toggle(el){
 let l=+el.dataset.line,i=+el.dataset.i;
 if(!selections[l])selections[l]=[];
 let arr=selections[l];
-
-if(arr.some(x=>x.i===i)){
-arr=arr.filter(x=>x.i!==i);
-}else{
-arr.push({i});
-}
+arr = arr.some(x=>x.i===i)?arr.filter(x=>x.i!==i):[...arr,{i}];
 selections[l]=arr;
 render();
 }
@@ -163,6 +164,7 @@ arr.push({i,gid:currentGroup});
 selections[l]=arr;
 }
 
+/* 描画 */
 function render(){
 let html="";
 pairs.forEach((p,line)=>{
@@ -174,17 +176,14 @@ let row="";
 words.forEach((w,i)=>{
 let cls="word";
 let item=map[i];
-
 if(item){
 if(item.gid!=null){
 cls+=" group";
 let g=arr.filter(x=>x.gid===item.gid).map(x=>x.i);
-let min=Math.min(...g),max=Math.max(...g);
-if(i===min)cls+=" start";
-if(i===max)cls+=" end";
+if(i===Math.min(...g))cls+=" start";
+if(i===Math.max(...g))cls+=" end";
 }else cls+=" single";
 }
-
 row+=`<span class="${cls}" data-i="${i}" data-line="${line}">${w}</span>`;
 });
 html+=`<div class="line">${row}</div>`;
@@ -192,11 +191,19 @@ html+=`<div class="line">${row}</div>`;
 selectArea.innerHTML=html;
 }
 
+/* ===== 問題生成（記号対応）===== */
 function create(){
 answers={};selectedQ=[];
 
 pairs.forEach((p,line)=>{
-let words=p.en.split(" ");
+let raw=p.en.split(" ");
+let words=raw.map(w=>{
+return{
+word:w.replace(/[.,!?]/g,""),
+mark:(w.match(/[.,!?]/)||[""])[0]
+};
+});
+
 let items=selections[line]||[];
 if(!items.length)return;
 
@@ -213,10 +220,10 @@ let end=Math.max(...g);
 let text=words.map((w,i)=>{
 if(i===start)return"______";
 if(i>start&&i<=end)return"";
-return w;
+return w.word+w.mark;
 }).join(" ");
 
-let ans=g.map(i=>words[i]).join(" ");
+let ans=g.map(i=>words[i].word).join(" ");
 selectedQ.push({text,ans,jp:p.jp});
 });
 });
@@ -225,6 +232,7 @@ selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
 renderQuiz();
 }
 
+/* ===== クイズ表示 ===== */
 let touchWord=null,clone=null;
 
 function renderQuiz(){
@@ -236,8 +244,7 @@ selectedQ.forEach((q,i)=>{
 html+=`
 <div class="card" onclick="this.querySelector('.jpHint')?.classList.toggle('show')">
 ${i+1}.
-${q.text.replace("______",
-`<span class="blank" data-i="${i}">______</span>`)}
+${q.text.replace("______",`<span class="blank" data-i="${i}">______</span>`)}
 ${show?`<div class="jpHint show">${q.jp}</div>`:`<div class="jpHint">${q.jp}</div>`}
 </div>`;
 });
@@ -245,8 +252,7 @@ ${show?`<div class="jpHint show">${q.jp}</div>`:`<div class="jpHint">${q.jp}</di
 html+=`<div id="vocabBox">`;
 
 vocab.forEach(v=>{
-html+=`
-<div class="wordBox"
+html+=`<div class="wordBox"
 ontouchstart="dragStart(event,'${v}')"
 ontouchmove="dragMove(event)"
 ontouchend="dragEnd(event)">
@@ -257,6 +263,7 @@ html+=`</div><button class="btn green" onclick="check()">答え合わせ</button
 quiz.innerHTML=html;
 }
 
+/* ドラッグ */
 function dragStart(e,w){
 touchWord=w;
 clone=document.createElement("div");
@@ -304,11 +311,21 @@ el.classList.toggle("used",used);
 });
 }
 
+/* 判定＋復習 */
 function check(){
+wrongList=[];
 document.querySelectorAll(".blank").forEach((el,i)=>{
 let ok=el.innerText===selectedQ[i].ans;
 el.classList.add(ok?"correct":"wrong");
+if(!ok)wrongList.push(selectedQ[i]);
 });
+}
+
+/* 復習 */
+function review(){
+if(!wrongList.length)return;
+selectedQ=wrongList.sort(()=>Math.random()-0.5);
+renderQuiz();
 }
 
 </script>
