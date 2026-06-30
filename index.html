@@ -348,6 +348,13 @@ function updateUI(){
 document.querySelectorAll(".blank").forEach((el,i)=>{
 el.innerText=answers[i]||"______";
 });
+
+/* ✅ ここ追加 */
+document.querySelectorAll(".wordBox").forEach(el=>{
+let used = Object.values(answers).includes(el.innerText);
+el.classList.toggle("used", used);
+});
+
 updateCounter();
 }
 
