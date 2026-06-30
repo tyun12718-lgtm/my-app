@@ -28,14 +28,14 @@ textarea{width:100%;height:70px;margin-bottom:8px;}
 .jpHint{display:none;font-size:13px;color:#555;margin-top:4px;}
 .jpHint.show{display:block;}
 
-/* ✅ 元仕様：quiz内スクロール */
+#quizWrapper{position:relative;}
+
 #quiz{
-height:70vh;
+max-height:70vh;
 overflow:auto;
-padding-bottom:120px;
+padding-bottom:140px;
 }
 
-/* ✅ 元仕様：語群はこの中で固定 */
 #vocabBox{
 position:sticky;
 bottom:0;
@@ -61,14 +61,10 @@ z-index:10;
 
 <div class="card">
 <div class="helper">
-英語と日本語を入力 → 選択 → 問題生成<br>
-コピー・URLで保存可能
+英語と日本語を入力 → 選択 → 問題生成
 </div>
 
-<label>英語</label>
 <textarea id="en"></textarea>
-
-<label>日本語</label>
 <textarea id="jp"></textarea>
 
 <button class="btn blue" onclick="load()">選択開始</button>
@@ -78,17 +74,18 @@ z-index:10;
 </div>
 
 <div class="card">
-<h3>選択</h3>
 <div id="selectArea"></div>
 </div>
 
 <div class="card">
-<h3>問題</h3>
 <label><input type="checkbox" id="showJP">日本語表示</label>
 <button class="btn orange" onclick="create()">問題生成</button>
 </div>
 
-<div id="quiz"></div>
+<div id="quizWrapper">
+  <div id="quiz"></div>
+  <div id="vocabBox"></div>
+</div>
 
 <script>
 
@@ -101,14 +98,12 @@ window.onload=()=>{
 let p=new URLSearchParams(location.search);
 let d=p.get("data");
 if(d){
-try{
 let data=JSON.parse(LZString.decompressFromEncodedURIComponent(d));
 pairs=data.pairs||[];
 selections=data.selections||{};
 en.value=pairs.map(p=>p.en).join("\n");
 jp.value=pairs.map(p=>p.jp).join("\n");
 render();
-}catch{}
 }
 };
 
@@ -188,52 +183,35 @@ let row="";
 words.forEach((w,i)=>{
 let cls="word";
 let item=map[i];
+
 if(item){
 if(item.gid!=null){
 cls+=" group";
-let g=arr.filter(x=>x.gid===item.gid).map(x=>x.i);
-if(i===Math.min(...g))cls+=" start";
-if(i===Math.max(...g))cls+=" end";
 }else cls+=" single";
 }
+
 row+=`<span class="${cls}" data-i="${i}" data-line="${line}">${w}</span>`;
 });
 html+=`<div class="line">${row}</div>`;
 });
 selectArea.innerHTML=html;
+
+/* ✅ ここ重要：選択画面では語群消す */
+quiz.innerHTML="";
+vocabBox.innerHTML="";
 }
 
 function create(){
 answers={};selectedQ=[];
 
 pairs.forEach((p,line)=>{
-let raw=p.en.split(" ");
-let words=raw.map(w=>({
-word:w.replace(/[.,!?]/g,""),
-mark:(w.match(/[.,!?]/)||[""])[0]
-}));
-
+let words=p.en.split(" ");
 let items=selections[line]||[];
 if(!items.length)return;
 
-let groups={};
-items.forEach(x=>{
-if(x.gid!=null)(groups[x.gid]??=[]).push(x.i);
-else groups["s"+x.i]=[x.i];
-});
-
-Object.values(groups).forEach(g=>{
-let start=Math.min(...g);
-let end=Math.max(...g);
-
-let text=words.map((w,i)=>{
-if(i===start)return"______";
-if(i>start&&i<=end)return"";
-return w.word+w.mark;
-}).join(" ");
-
-let ans=g.map(i=>words[i].word).join(" ");
-selectedQ.push({text,ans,jp:p.jp});
+items.forEach(g=>{
+let text=words.map((w,i)=>i===g.i?"______":w).join(" ");
+selectedQ.push({text,ans:words[g.i],jp:p.jp});
 });
 });
 
@@ -241,39 +219,42 @@ selectedQ=selectedQ.sort(()=>Math.random()-0.5).slice(0,10);
 renderQuiz();
 }
 
-let touchWord=null,clone=null;
-
 function renderQuiz(){
-let vocab=selectedQ.map(q=>q.ans.replace(/[.,!?]/g,"")).sort(()=>Math.random()-0.5);
+let vocab=selectedQ.map(q=>q.ans).sort(()=>Math.random()-0.5);
 let show=document.getElementById("showJP").checked;
+
 let html="";
 
 selectedQ.forEach((q,i)=>{
 html+=`
-<div class="card" onclick="this.querySelector('.jpHint')?.classList.toggle('show')">
+<div class="card">
 ${i+1}.
 ${q.text.replace("______",`<span class="blank" data-i="${i}">______</span>`)}
-${show?`<div class="jpHint show">${q.jp}</div>`:`<div class="jpHint">${q.jp}</div>`}
+${show?`<div class="jpHint show">${q.jp}</div>`:""}
 </div>`;
 });
 
-html+=`<div id="vocabBox">`;
-
-vocab.forEach(v=>{
 html+=`
+<button class="btn green" onclick="check()">答え合わせ</button>
+<button class="btn green" onclick="review()">復習問題</button>
+`;
+
+quiz.innerHTML=html;
+
+/* 語群描画 */
+let vocabHTML="";
+vocab.forEach(v=>{
+vocabHTML+=`
 <div class="wordBox"
 ontouchstart="dragStart(event,'${v}')"
 ontouchmove="dragMove(event)"
 ontouchend="dragEnd(event)">
 ${v}</div>`;
 });
-
-html+=`</div>
-<button class="btn green" onclick="check()">答え合わせ</button>
-<button class="btn green" onclick="review()">復習問題</button>`;
-
-quiz.innerHTML=html;
+vocabBox.innerHTML=vocabHTML;
 }
+
+let touchWord=null,clone=null;
 
 function dragStart(e,w){
 touchWord=w;
@@ -298,15 +279,9 @@ let target=document.elementFromPoint(t.clientX,t.clientY);
 
 if(target&&target.classList.contains("blank")){
 let i=+target.dataset.i;
-
-Object.keys(answers).forEach(k=>{
-if(answers[k]===touchWord)answers[k]=undefined;
-});
-
 answers[i]=touchWord;
 updateUI();
 }
-
 clone.remove();
 clone=null;
 }
@@ -314,11 +289,6 @@ clone=null;
 function updateUI(){
 document.querySelectorAll(".blank").forEach((el,i)=>{
 el.innerText=answers[i]||"______";
-});
-
-document.querySelectorAll(".wordBox").forEach(el=>{
-let used=Object.values(answers).includes(el.innerText);
-el.classList.toggle("used",used);
 });
 }
 
@@ -333,7 +303,7 @@ if(!ok)wrongList.push(selectedQ[i]);
 
 function review(){
 if(!wrongList.length)return;
-selectedQ=wrongList.sort(()=>Math.random()-0.5);
+selectedQ=wrongList;
 renderQuiz();
 }
 
